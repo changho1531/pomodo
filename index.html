@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>하루 한 알 - 포모도로 타이머</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 구글 폰트 (Inter & Pretendard 대체제) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <!-- Lucide 아이콘 (심플하고 모던한 라인 아이콘) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            transition: background 1s ease-in-out;
+        }
+        /* 프로그레스 서클 회전 및 대칭 보정 */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.35s linear;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+    </style>
+</head>
+<body id="body-bg" class="h-full flex items-center justify-center bg-gradient-to-br from-rose-500 to-red-600 text-white overflow-hidden p-4">
+
+    <div class="relative w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-between gap-6 transition-all duration-500 hover:shadow-white/5">
+        
+        <!-- 상단 헤더: 상태 표시 & 설정 -->
+        <div class="w-full flex justify-between items-center z-10">
+            <div class="flex items-center gap-2 bg-white/20 px-3.5 py-1.5 rounded-full backdrop-blur-md">
+                <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
+                <span id="status-text" class="text-xs font-bold uppercase tracking-wider">집중 중</span>
+            </div>
+            
+            <!-- 완료한 뽀모도로 수량 인디케이터 -->
+            <div class="flex items-center gap-1" id="pomodoro-dots">
+                <!-- 동적으로 심볼 추가 예정 -->
+                <div class="text-xs font-semibold text-white/80 bg-white/10 px-2.5 py-1 rounded-full flex items-center gap-1">
+                    🍅 <span id="completed-count">0</span>/4
+                </div>
+            </div>
+        </div>
+
+        <!-- 중앙 타이머 및 시각 정보 -->
+        <div class="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center my-4">
+            <!-- SVG 프로그레스 원형 바 -->
+            <svg class="absolute w-full h-full" viewBox="0 0 220 220">
+                <!-- 트랙 (배경 원) -->
+                <circle 
+                    class="text-white/10" 
+                    stroke="currentColor" 
+                    stroke-width="6" 
+                    fill="transparent" 
+                    r="98" 
+                    cx="110" 
+                    cy="110" />
+                <!-- 실제 진행 바 -->
+                <circle 
+                    id="progress-circle"
+                    class="progress-ring__circle text-white stroke-linecap-round" 
+                    stroke="currentColor" 
+                    stroke-width="7" 
+                    fill="transparent" 
+                    r="98" 
+                    cx="110" 
+                    cy="110"
+                    stroke-dasharray="615.75" 
+                    stroke-dashoffset="0" />
+            </svg>
+
+            <!-- 중앙 타이머 텍스트 -->
+            <div class="text-center z-10">
+                <h1 id="timer-display" class="text-6xl md:text-7xl font-black tracking-tighter tabular-nums select-none drop-shadow-md">
+                    25:00
+                </h1>
+                <p id="motivational-msg" class="text-xs font-semibold text-white/80 tracking-wide mt-2 h-4 transition-all duration-300">
+                    지금 이 순간에 몰입하세요.
+                </p>
+            </div>
+        </div>
+
+        <!-- 중앙 하단: 집중할 일 등록 영역 -->
+        <div class="w-full bg-white/10 rounded-2xl p-4 border border-white/10 flex flex-col gap-2 transition-all duration-300">
+            <span class="text-[11px] font-bold text-white/60 uppercase tracking-widest block">지금 몰입할 단 한 가지</span>
+            
+            <!-- 입력 모드 -->
+            <div id="todo-input-group" class="flex gap-2 w-full">
+                <input 
+                    type="text" 
+                    id="todo-input" 
+                    placeholder="예: 보고서 작성하기, 코드 디버깅..." 
+                    class="flex-1 bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+                />
+                <button 
+                    id="todo-save-btn" 
+                    class="bg-white text-rose-600 hover:bg-white/90 active:scale-95 p-2 rounded-xl transition-all flex items-center justify-center shadow-lg"
+                    title="등록"
+                >
+                    <i data-lucide="check" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- 활성화 모드 (태스크 카드) -->
+            <div id="todo-card" class="hidden flex items-center justify-between w-full bg-white/10 border border-white/20 p-2.5 rounded-xl transition-all">
+                <div class="flex items-center gap-3 overflow-hidden flex-1 pr-2">
+                    <button id="todo-complete-btn" class="w-5 h-5 rounded-md border-2 border-white/50 hover:border-white flex items-center justify-center transition-all bg-transparent text-transparent hover:bg-white/10">
+                        <i data-lucide="check" class="w-3.5 h-3.5 stroke-[3]"></i>
+                    </button>
+                    <span id="todo-task-name" class="text-sm font-semibold truncate leading-tight">할 일이 들어갑니다</span>
+                </div>
+                <button id="todo-delete-btn" class="text-white/60 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-all">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 컨트롤 액션 패널 -->
+        <div class="w-full flex items-center justify-between gap-4 mt-2">
+            <!-- 백색소음 제어 토글 -->
+            <button 
+                id="noise-toggle-btn" 
+                class="w-12 h-12 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                title="백색소음 (빗소리풍 갈색 소음)"
+            >
+                <i data-lucide="volume-x" id="noise-icon" class="w-5 h-5"></i>
+            </button>
+
+            <!-- 메인 제어: 재생/일시정지 -->
+            <button 
+                id="play-pause-btn" 
+                class="flex-1 h-14 bg-white text-rose-600 font-bold text-lg rounded-2xl shadow-xl flex items-center justify-center gap-2 hover:bg-rose-50 active:scale-[0.98] transition-all cursor-pointer"
+            >
+                <i data-lucide="play" id="play-icon" class="w-6 h-6 fill-current"></i>
+                <span id="play-text">집중 시작</span>
+            </button>
+
+            <!-- 건너뛰기 / 리셋 기능 -->
+            <button 
+                id="skip-btn" 
+                class="w-12 h-12 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                title="다음 세션으로 건너뛰기"
+            >
+                <i data-lucide="skip-forward" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- 리셋 소형 버튼 -->
+        <button id="reset-btn" class="text-[11px] font-semibold text-white/50 hover:text-white/80 transition-all hover:underline mt-1">
+            타이머 초기화
+        </button>
+
+    </div>
+
+    <!-- 하단 라이선스 및 간편 가이드 안내 -->
+    <div class="absolute bottom-4 left-0 right-0 text-center text-white/40 text-[10px] tracking-widest pointer-events-none uppercase">
+        Pomodoro Focus Timer MVP • Click Reset To Reset Cycle
+    </div>
+
+    <script>
+        // --- 1. 초기 상태 변수 및 설정 정의 ---
+        const FOCUS_TIME = 25 * 60; // 25분 (초 단위)
+        const BREAK_TIME = 5 * 60;  // 5분
+        const LONG_BREAK_TIME = 15 * 60; // 15분
+
+        let currentMode = 'focus'; // 'focus' | 'break' | 'longBreak'
+        let timeLeft = FOCUS_TIME;
+        let timerInterval = null;
+        let isRunning = false;
+        let completedPomodoros = 0;
+
+        // Web Audio API 상태 관련
+        let audioCtx = null;
+        let noiseNode = null;
+        let noiseGainNode = null;
+        let isNoisePlaying = false;
+
+        // --- 2. DOM 요소 매핑 ---
+        const bodyBg = document.getElementById('body-bg');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const completedCount = document.getElementById('completed-count');
+        const timerDisplay = document.getElementById('timer-display');
+        const progressCircle = document.getElementById('progress-circle');
+        const motivationalMsg = document.getElementById('motivational-msg');
+
+        // To-Do 관련 DOM
+        const todoInputGroup = document.getElementById('todo-input-group');
+        const todoInput = document.getElementById('todo-input');
+        const todoSaveBtn = document.getElementById('todo-save-btn');
+        const todoCard = document.getElementById('todo-card');
+        const todoTaskName = document.getElementById('todo-task-name');
+        const todoCompleteBtn = document.getElementById('todo-complete-btn');
+        const todoDeleteBtn = document.getElementById('todo-delete-btn');
+
+        // 컨트롤러 DOM
+        const noiseToggleBtn = document.getElementById('noise-toggle-btn');
+        const noiseIcon = document.getElementById('noise-icon');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const playIcon = document.getElementById('play-icon');
+        const playText = document.getElementById('play-text');
+        const skipBtn = document.getElementById('skip-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // SVG Circle Perimeter계산
+        const circleRadius = 98;
+        const strokeDashArrayVal = 2 * Math.PI * circleRadius; // 615.75
+
+        // 상태 메세지 딕셔너리
+        const messages = {
+            focus: [
+                "지금 이 순간에 몰입하세요.",
+                "휴식까지 조금만 힘내요!",
+                "화면을 끄지 마시고 집중해 봐요.",
+                "가장 가치 있는 일에 우선 집중하기!"
+            ],
+            break: [
+                "심호흡을 크게 한 번 해보세요.",
+                "잠시 눈을 쉬어주세요.",
+                "물 한 잔 가볍게 들이켜보세요.",
+                "충분히 잘하고 있습니다. 편하게 쉬세요."
+            ],
+            longBreak: [
+                "긴 휴식입니다. 일어나서 스트레칭하세요!",
+                "충전 후 다시 시작할 수 있습니다.",
+                "정신을 완전히 맑게 가꾸는 시간."
+            ]
+        };
+
+        // --- STREAMING_CHUNK: 브라우저 오디오 시스템 구현 (웹 오디오 신디사이저) ---
+        // 소리 재생을 위한 Web Audio Context 초기화
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // 1) 맑은 차임 사운드 합성 (알림음 대용)
+        function playChimeSound() {
+            try {
+                initAudio();
+                const now = audioCtx.currentTime;
+                
+                // 메인 벨 소리 발진기 1 (기본 주파수)
+                const osc1 = audioCtx.createOscillator();
+                const gain1 = audioCtx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(523.25, now); // C5 (도)
+                osc1.frequency.exponentialRampToValueAtTime(880.00, now + 0.15); // A5 (라)
+                
+                // 화음 생성용 서브 발진기 2
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+                osc2.type = 'triangle';
+                osc2.frequency.setValueAtTime(659.25, now); // E5 (미)
+                osc2.frequency.exponentialRampToValueAtTime(1318.51, now + 0.2); // E6 (한 옥타브 위 미)
+
+                // 연결 및 감쇠 볼륨 조정
+                osc1.connect(gain1);
+                osc2.connect(gain2);
+                gain1.connect(audioCtx.destination);
+                gain2.connect(audioCtx.destination);
+
+                gain1.gain.setValueAtTime(0.3, now);
+                gain1.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+                
+                gain2.gain.setValueAtTime(0.15, now);
+                gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+
+                osc1.start(now);
+                osc2.start(now);
+                osc1.stop(now + 1.3);
+                osc2.stop(now + 1.1);
+            } catch (err) {
+                console.warn("오디오 플레이어 활성화 오류: ", err);
+            }
+        }
+
+        // 2) 집중용 실시간 백색소음(Brown Noise) 합성 알고리즘
+        // 외부 음원을 수신하지 않고 실시간 랜덤 노이즈 버퍼를 연산하여 귀가 편안한 빗소리풍 배경 사운드를 만듭니다.
+        function createBrownNoiseNode() {
+            const bufferSize = 10 * audioCtx.sampleRate;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            
+            let lastOut = 0.0;
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                // 브라운 노이즈 필터링 연산
+                output[i] = (lastOut + (0.02 * white)) / 1.02;
+                lastOut = output[i];
+                output[i] *= 3.5; // 청크 증폭 처리
+            }
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = noiseBuffer;
+            source.loop = true;
+            return source;
+        }
+
+        function toggleAmbientNoise() {
+            try {
+                initAudio();
+                
+                if (isNoisePlaying) {
+                    // 백색소음 끄기
+                    if (noiseNode) {
+                        noiseNode.stop();
+                        noiseNode.disconnect();
+                        noiseNode = null;
+                    }
+                    isNoisePlaying = false;
+                    noiseIcon.setAttribute('data-lucide', 'volume-x');
+                    noiseToggleBtn.classList.remove('bg-white/30');
+                    noiseToggleBtn.classList.add('bg-white/10');
+                } else {
+                    // 오디오 컨텍스트가 정지 상태일 시 활성화 처리
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+                    
+                    // 백색소음 켜기
+                    noiseNode = createBrownNoiseNode();
+                    noiseGainNode = audioCtx.createGain();
+                    
+                    // 은은하고 먹먹한 볼륨 설정 (장시간 청취에 안전한 낮은 레벨)
+                    noiseGainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                    
+                    noiseNode.connect(noiseGainNode);
+                    noiseGainNode.connect(audioCtx.destination);
+                    
+                    noiseNode.start(0);
+                    isNoisePlaying = true;
+                    noiseIcon.setAttribute('data-lucide', 'volume-2');
+                    noiseToggleBtn.classList.remove('bg-white/10');
+                    noiseToggleBtn.classList.add('bg-white/30');
+                }
+                lucide.createIcons(); // 아이콘 갱신
+            } catch (err) {
+                console.error("사운드 재생 에러:", err);
+            }
+        }
+
+        // --- STREAMING_CHUNK: 핵심 타이머 로직 설계 및 테마 제어 함수 ---
+        // 현재 상태에 따라 UI 테마 및 기분 전환 컬러 매핑
+        function updateTheme() {
+            // 그라디언트 테마 맵핑
+            if (currentMode === 'focus') {
+                bodyBg.className = "h-full flex items-center justify-center bg-gradient-to-br from-rose-500 to-red-600 text-white overflow-hidden p-4";
+                playPauseBtn.className = "flex-1 h-14 bg-white text-rose-600 font-bold text-lg rounded-2xl shadow-xl flex items-center justify-center gap-2 hover:bg-rose-50 active:scale-[0.98] transition-all cursor-pointer";
+                todoSaveBtn.className = "bg-white text-rose-600 hover:bg-white/90 active:scale-95 p-2 rounded-xl transition-all flex items-center justify-center shadow-lg";
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-rose-200 animate-pulse";
+                statusText.innerText = "집중합시다";
+            } else if (currentMode === 'break') {
+                bodyBg.className = "h-full flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-white overflow-hidden p-4";
+                playPauseBtn.className = "flex-1 h-14 bg-white text-emerald-600 font-bold text-lg rounded-2xl shadow-xl flex items-center justify-center gap-2 hover:bg-emerald-50 active:scale-[0.98] transition-all cursor-pointer";
+                todoSaveBtn.className = "bg-white text-emerald-600 hover:bg-white/90 active:scale-95 p-2 rounded-xl transition-all flex items-center justify-center shadow-lg";
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-200 animate-pulse";
+                statusText.innerText = "짧은 휴식";
+            } else if (currentMode === 'longBreak') {
+                bodyBg.className = "h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 to-blue-600 text-white overflow-hidden p-4";
+                playPauseBtn.className = "flex-1 h-14 bg-white text-indigo-600 font-bold text-lg rounded-2xl shadow-xl flex items-center justify-center gap-2 hover:bg-indigo-50 active:scale-[0.98] transition-all cursor-pointer";
+                todoSaveBtn.className = "bg-white text-indigo-600 hover:bg-white/90 active:scale-95 p-2 rounded-xl transition-all flex items-center justify-center shadow-lg";
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-indigo-200 animate-pulse";
+                statusText.innerText = "긴 휴식";
+            }
+            showRandomMessage();
+        }
+
+        // 현재 모드에 알맞은 랜덤 자극 구절 갱신
+        function showRandomMessage() {
+            const list = messages[currentMode];
+            const randomIndex = Math.floor(Math.random() * list.length);
+            motivationalMsg.innerText = list[randomIndex];
+        }
+
+        // 타이머 자릿수 포맷 보정 (1 -> 01)
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // 진행률에 따른 원형 SVG 프로그레스 차감 연산
+        function updateProgress() {
+            let total = FOCUS_TIME;
+            if (currentMode === 'break') total = BREAK_TIME;
+            if (currentMode === 'longBreak') total = LONG_BREAK_TIME;
+
+            const percentage = timeLeft / total;
+            const offset = strokeDashArrayVal * (1 - percentage);
+            progressCircle.style.strokeDashoffset = offset;
+        }
+
+        // 화면 갱신 메인
+        function updateDisplay() {
+            timerDisplay.innerText = formatTime(timeLeft);
+            updateProgress();
+            completedCount.innerText = completedPomodoros % 4;
+        }
+
+        // 세션 자동 종료 및 다음 사이클 진행 상태 변이
+        function handleSessionComplete() {
+            playChimeSound();
+            
+            if (currentMode === 'focus') {
+                completedPomodoros++;
+                
+                // 4회 주기로 긴 휴식 제공
+                if (completedPomodoros % 4 === 0) {
+                    currentMode = 'longBreak';
+                    timeLeft = LONG_BREAK_TIME;
+                } else {
+                    currentMode = 'break';
+                    timeLeft = BREAK_TIME;
+                }
+            } else {
+                // 휴식 세션이 끝난 뒤 자동으로 집중 모드 복귀
+                currentMode = 'focus';
+                timeLeft = FOCUS_TIME;
+            }
+
+            pauseTimer();
+            updateTheme();
+            updateDisplay();
+        }
+
+        // 타이머 반복 실행 연산자
+        function tick() {
+            if (timeLeft > 0) {
+                timeLeft--;
+                updateDisplay();
+            } else {
+                handleSessionComplete();
+            }
+        }
+
+        // 타이머 제어 인터페이스 (시작, 일시정지, 완전 초기화)
+        function startTimer() {
+            if (isRunning) return;
+            initAudio(); // 최초 사용자 클릭 시 오디오 활성화 대기
+            isRunning = true;
+            timerInterval = setInterval(tick, 1000);
+            
+            playIcon.setAttribute('data-lucide', 'pause');
+            playText.innerText = "일시 정지";
+            lucide.createIcons();
+        }
+
+        function pauseTimer() {
+            if (!isRunning) return;
+            isRunning = false;
+            clearInterval(timerInterval);
+            timerInterval = null;
+
+            playIcon.setAttribute('data-lucide', 'play');
+            // 문구 조절
+            playText.innerText = currentMode === 'focus' ? "집중 이어서 하기" : "휴식 계속하기";
+            lucide.createIcons();
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            if (currentMode === 'focus') {
+                timeLeft = FOCUS_TIME;
+            } else if (currentMode === 'break') {
+                timeLeft = BREAK_TIME;
+            } else {
+                timeLeft = LONG_BREAK_TIME;
+            }
+            playText.innerText = currentMode === 'focus' ? "집중 시작" : "휴식 시작";
+            updateDisplay();
+        }
+
+        // --- STREAMING_CHUNK: 단일 To-Do 등록 및 데이터 보존 컴포넌트 로직 ---
+        // 로컬스토리지 연동하여 현재 작업 복원 및 보관
+        function loadTodo() {
+            const savedTask = localStorage.getItem('pomo_mvp_task');
+            if (savedTask) {
+                showActiveTodo(savedTask);
+            } else {
+                showTodoInput();
+            }
+        }
+
+        function showActiveTodo(taskName) {
+            todoTaskName.innerText = taskName;
+            todoInputGroup.classList.add('hidden');
+            todoCard.classList.remove('hidden');
+        }
+
+        function showTodoInput() {
+            todoInput.value = '';
+            todoCard.classList.add('hidden');
+            todoInputGroup.classList.remove('hidden');
+            todoTaskName.style.textDecoration = "none";
+            todoCompleteBtn.classList.remove('bg-white/30', 'text-white');
+            todoCompleteBtn.classList.add('bg-transparent', 'text-transparent');
+        }
+
+        // --- STREAMING_CHUNK: 이벤트 바인딩 및 초기화 가동 ---
+        // 할 일 전송 이벤트
+        todoSaveBtn.addEventListener('click', () => {
+            const task = todoInput.value.trim();
+            if (task !== '') {
+                localStorage.setItem('pomo_mvp_task', task);
+                showActiveTodo(task);
+            }
+        });
+
+        todoInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                todoSaveBtn.click();
+            }
+        });
+
+        // 할 일 삭제
+        todoDeleteBtn.addEventListener('click', () => {
+            localStorage.removeItem('pomo_mvp_task');
+            showTodoInput();
+        });
+
+        // 할 일 즉각 완료 토글
+        todoCompleteBtn.addEventListener('click', () => {
+            const isCompleted = todoTaskName.style.textDecoration === "line-through";
+            if (isCompleted) {
+                todoTaskName.style.textDecoration = "none";
+                todoCompleteBtn.classList.remove('bg-white/30', 'text-white');
+                todoCompleteBtn.classList.add('bg-transparent', 'text-transparent');
+            } else {
+                todoTaskName.style.textDecoration = "line-through";
+                todoCompleteBtn.classList.add('bg-white/30', 'text-white');
+                todoCompleteBtn.classList.remove('bg-transparent', 'text-transparent');
+                // 부드러운 알림 사운드 제공
+                playChimeSound();
+            }
+        });
+
+        // 메인 제어 버튼들 매핑
+        playPauseBtn.addEventListener('click', () => {
+            if (isRunning) {
+                pauseTimer();
+            } else {
+                startTimer();
+            }
+        });
+
+        // 세션 강제 건너뛰기
+        skipBtn.addEventListener('click', () => {
+            if (confirm("현재 세션을 완료 상태로 간주하고 다음 단계로 건너뛰시겠습니까?")) {
+                handleSessionComplete();
+            }
+        });
+
+        // 초기화 버튼 리스너
+        resetBtn.addEventListener('click', () => {
+            resetTimer();
+        });
+
+        // 전체 초기 상태 리셋 (더블클릭/수동 리셋)
+        resetBtn.addEventListener('dblclick', () => {
+            if (confirm("전체 집중 흐름(사이클 기록)을 초기 상태로 되돌릴까요?")) {
+                completedPomodoros = 0;
+                currentMode = 'focus';
+                timeLeft = FOCUS_TIME;
+                pauseTimer();
+                updateTheme();
+                updateDisplay();
+            }
+        });
+
+        // 백색소음 토글
+        noiseToggleBtn.addEventListener('click', toggleAmbientNoise);
+
+        // --- 3. 애플리케이션 초기화 구동 ---
+        window.onload = function() {
+            // 아이콘 렌더링
+            lucide.createIcons();
+            // 테마 설정
+            updateTheme();
+            // 프로그레스 바 원점 갱신
+            updateDisplay();
+            // ToDo 불러오기
+            loadTodo();
+        };
+
+    </script>
+</body>
+</html>
